@@ -1,0 +1,58 @@
+
+media-home: "/var/tmp/media"
+
+genres:
+  - name: "Western Classical"
+    albums:
+      - name: "Theramin"
+        tracks:
+          - track: 1
+            ytid: "bGx2wGKPQM0"
+            title: "Ave Maria"
+            artist:
+                name: "Katica Illenyi"
+                shortname: "K Illenyi"
+            composer: "F. Schubert"
+            folder: "western-classical/theramin"
+            filename: "ave-maria"
+            section:
+              start: "00:00:16"
+            formats: [mp3, m4a]
+            thumbnails:
+                mp3: true
+                m4a: true
+
+  - name: "Western Film Musical"
+    albums:
+      - name: "Theramin"
+        tracks:
+          - track: 2
+            ytid: "ajM4vYCZMZk"
+            title: "The Ecstasy of Gold"
+            artist:
+                name: "Carolina Eyck"
+                shortname: "C Eyck"
+            composer: "Ennio Morricone"
+            folder: "western-film-musical/theramin"
+            filename: "ecstasy-of-gold"
+            formats: [mp3, m4a]
+            thumbnails:
+                mp3: true
+                m4a: true
+
+      - name: "The Sound of Music"
+        tracks:
+          - track: 1
+            ytid: "ekyURclrK60"
+            title: "Do-Re-Mi"
+            artist:
+                name: "Julie Andrews"
+                shortname: "J Andrews"
+            composer: "Rodgers & Hammerstein"
+            folder: "western-film-musical/sound-of-music"
+            filename: "do-re-mi"
+            formats: [mp3, m4a]
+            thumbnails:
+                mp3: true
+                m4a: true
+
