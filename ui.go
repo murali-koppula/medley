@@ -87,7 +87,7 @@ func (m model) View() string {
 	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).Render
 	statusStyle := lipgloss.NewStyle().Background(lipgloss.Color("5")).Foreground(lipgloss.Color("15")).Padding(0, 1).Render
 
-	builder.WriteString(headerStyle(" AUDLER ── High-Fidelity Audio Provisioning Pipeline\n\n"))
+	builder.WriteString(headerStyle(" MEDLEY ── High-Fidelity Audio Provisioning Pipeline\n\n"))
 
 	// Create a clear progression layout
 	builder.WriteString(fmt.Sprintf(" Progress: [%d/%d] tasks evaluated\n", m.currentIdx, len(m.tasks)))
