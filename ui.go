@@ -28,7 +28,7 @@ func initialModel(tasks []TrackTask, logChan chan string, errChan chan error) mo
 	return model{
 		tasks:      tasks,
 		currentIdx: 0,
-		logs:       []string{"Initializing Audler engine..."},
+		logs:       []string{"Initializing Medley engine..."},
 		status:     "Ready",
 		logChan:    logChan,
 		errChan:    errChan,
