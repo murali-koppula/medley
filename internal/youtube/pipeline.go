@@ -1,18 +1,19 @@
-package main
+package youtube
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 
+	"medley/internal/shared"
+
 	"gopkg.in/yaml.v3"
 )
 
-// Define the YAML schema natively
 type Config struct {
-	MediaHome string  `yaml:"media-home"`
-	Genres    []Genre `yaml:"genres"`
+	Genres []Genre `yaml:"genres"`
 }
 
 type Genre struct {
@@ -44,7 +45,6 @@ type Track struct {
 	Composer string `yaml:"composer"`
 }
 
-// TrackTask aggregates contextual data needed for processing an entry
 type TrackTask struct {
 	Track     Track
 	GenreName string
@@ -52,8 +52,7 @@ type TrackTask struct {
 	MediaHome string
 }
 
-// ParseMediaFile completely replaces the complex internal yq execution block
-func ParseMediaFile(path string) ([]TrackTask, error) {
+func ParseMediaFile(path string, mediaHome string) ([]TrackTask, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -70,7 +69,6 @@ func ParseMediaFile(path string) ([]TrackTask, error) {
 	for _, genre := range cfg.Genres {
 		for _, album := range genre.Albums {
 			for _, track := range album.Tracks {
-				// Apply validation fallbacks equivalent to the Bash script defaults
 				if track.Filename == "" {
 					track.Filename = track.Title
 				}
@@ -88,7 +86,7 @@ func ParseMediaFile(path string) ([]TrackTask, error) {
 					Track:     track,
 					GenreName: genre.Name,
 					AlbumName: album.Name,
-					MediaHome: cfg.MediaHome,
+					MediaHome: mediaHome,
 				})
 			}
 		}
@@ -96,8 +94,7 @@ func ParseMediaFile(path string) ([]TrackTask, error) {
 	return tasks, nil
 }
 
-// ProcessTask handles the processing sequence for an individual task
-func ProcessTask(task TrackTask, logChan chan<- string) error {
+func ProcessTask(ctx context.Context, task TrackTask, logChan chan<- string) error {
 	dldir := filepath.Join(task.MediaHome, "downloads")
 	tmpdir := filepath.Join(task.MediaHome, "tmp")
 	_ = os.MkdirAll(dldir, 0755)
@@ -105,10 +102,7 @@ func ProcessTask(task TrackTask, logChan chan<- string) error {
 
 	logChan <- fmt.Sprintf("Processing track: %s", task.Track.Title)
 
-	// --- 1. Fetch Media via yt-dlp ---
 	ytargs := []string{"--no-warnings", "--quiet", "-f", "ba[ext=webm],ba"}
-
-	// Determine if either target format requires an image download
 	needImg := task.Track.Thumbnails["mp3"] || task.Track.Thumbnails["m4a"]
 	if needImg {
 		ytargs = append(ytargs, "--write-thumbnail")
@@ -117,12 +111,11 @@ func ProcessTask(task TrackTask, logChan chan<- string) error {
 	ytargs = append(ytargs, "https://www.youtube.com/watch?v="+task.Track.Ytid)
 
 	logChan <- fmt.Sprintf("Downloading asset %s via yt-dlp...", task.Track.Filename)
-	cmd := exec.Command("yt-dlp", ytargs...)
+	cmd := exec.CommandContext(ctx, "yt-dlp", ytargs...)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("yt-dlp failed: %w", err)
 	}
 
-	// Dynamic extension discovery equivalent to get_audio_format()
 	var dlext string
 	for _, ext := range []string{"webm", "m4a", "mp3"} {
 		if _, err := os.Stat(filepath.Join(dldir, task.Track.Filename+"."+ext)); err == nil {
@@ -134,14 +127,12 @@ func ProcessTask(task TrackTask, logChan chan<- string) error {
 		return fmt.Errorf("no downloaded asset discovered for %s", task.Track.Filename)
 	}
 
-	// --- Loop over individual format targets ---
 	for _, fmtTarget := range task.Track.Formats {
 		logChan <- fmt.Sprintf("Extracting audio target format: %s", fmtTarget)
 
 		afile := filepath.Join(tmpdir, task.Track.Filename+"."+fmtTarget)
 		dlfile := filepath.Join(dldir, task.Track.Filename+"."+dlext)
 
-		// Incorporate the phase-cancellation fix along with script args
 		ffargs := []string{"-nostdin", "-y", "-loglevel", "error"}
 		if task.Track.Section.Start != "" {
 			ffargs = append(ffargs, "-ss", task.Track.Section.Start)
@@ -151,7 +142,6 @@ func ProcessTask(task TrackTask, logChan chan<- string) error {
 		}
 		ffargs = append(ffargs, "-i", dlfile, "-map", "0:a", "-vn", "-dn")
 
-		// Address Phase Cancellation on downloads while respecting copy logic
 		if fmtTarget == "mp3" {
 			if dlext == "webm" || dlext == "m4a" {
 				ffargs = append(ffargs, "-af", "pan=stereo|c0=FL|c1=FL", "-c:a", "libmp3lame", "-b:a", "256k", "-ar", "44100", "-map_metadata", "-1", "-bitexact")
@@ -167,11 +157,10 @@ func ProcessTask(task TrackTask, logChan chan<- string) error {
 		}
 		ffargs = append(ffargs, afile)
 
-		if err := exec.Command("ffmpeg", ffargs...).Run(); err != nil {
+		if err := exec.CommandContext(ctx, "ffmpeg", ffargs...).Run(); err != nil {
 			return fmt.Errorf("ffmpeg extraction error: %w", err)
 		}
 
-		// --- Handle Image/Thumbnail Resizing via ImageMagick Convert ---
 		imgfile := filepath.Join(tmpdir, fmtTarget+".jpg")
 		if task.Track.Thumbnails[fmtTarget] {
 			logChan <- "Converting downscaled artwork layout..."
@@ -182,7 +171,6 @@ func ProcessTask(task TrackTask, logChan chan<- string) error {
 				sizeArg = "320>"
 			}
 
-			// Find downloaded image
 			var srcImg string
 			for _, ext := range []string{"jpg", "jpeg", "webp", "png"} {
 				testPath := filepath.Join(dldir, task.Track.Filename+"."+ext)
@@ -194,17 +182,16 @@ func ProcessTask(task TrackTask, logChan chan<- string) error {
 
 			if srcImg != "" {
 				convArgs := []string{srcImg, "-resize", sizeArg, "-interlace", "none", "-strip", "-quality", "80", imgfile}
-				_ = exec.Command("convert", convArgs...).Run()
+				_ = exec.CommandContext(ctx, "convert", convArgs...).Run()
 			}
 		}
 
-		// --- Tagging Pass via eyeD3 / AtomicParsley ---
 		destDir := filepath.Join(task.MediaHome, fmtTarget, task.Track.Folder)
 		_ = os.MkdirAll(destDir, 0755)
 		finalDest := filepath.Join(destDir, task.Track.Filename+"."+fmtTarget)
 
-		// Copy working raw asset to destination
-		if err := copyFile(afile, finalDest); err != nil {
+		// Rely on the internal/shared package for common file interactions
+		if err := shared.CopyFile(afile, finalDest); err != nil {
 			return err
 		}
 
@@ -230,15 +217,13 @@ func ProcessTask(task TrackTask, logChan chan<- string) error {
 				}
 			}
 			tagArgs = append(tagArgs, finalDest)
-			_ = exec.Command("eyeD3", tagArgs...).Run()
+			_ = exec.CommandContext(ctx, "eyeD3", tagArgs...).Run()
 
 		} else if fmtTarget == "m4a" {
-			// Leverage shortname fallback for tight M4A memory limits
 			aname := task.Track.Artist.Shortname
 			if aname == "" {
 				aname = task.Track.Artist.Name
 			}
-
 			tagArgs := []string{finalDest, "--album", task.AlbumName, "--tracknum", fmt.Sprintf("%d", task.Track.TrackNum), "--title", task.Track.Title}
 			if task.GenreName != "" {
 				tagArgs = append(tagArgs, "--genre", task.GenreName)
@@ -255,16 +240,8 @@ func ProcessTask(task TrackTask, logChan chan<- string) error {
 				}
 			}
 			tagArgs = append(tagArgs, "--overWrite")
-			_ = exec.Command("AtomicParsley", tagArgs...).Run()
+			_ = exec.CommandContext(ctx, "AtomicParsley", tagArgs...).Run()
 		}
 	}
 	return nil
-}
-
-func copyFile(src, dst string) error {
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(dst, data, 0644)
 }

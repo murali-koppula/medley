@@ -30,7 +30,7 @@ optionally rename it as needed; and run the *MeDLey* Docker image to generate th
 $ rm -rf /var/tmp/media/
 $ mkdir /var/tmp/media/
 $ curl -sSLkf -m 300 -w "%{http_code}" --output-dir /var/tmp/media -O https://github.com/murali-koppula/medley/raw/refs/heads/main/music.yaml
-$ docker run --rm -it -v /var/tmp/media:/var/tmp/media mmkdcr/medley:latest -f /var/tmp/media/music.yaml
+$ docker run --rm -it -v /var/tmp/media:/var/tmp/media mmkdcr/medley:latest yt -f /var/tmp/media/music.yaml
 ```
 
 </details>
@@ -43,7 +43,7 @@ $ docker run --rm -it -v /var/tmp/media:/var/tmp/media mmkdcr/medley:latest -f /
 > Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\var\tmp\media"
 > New-Item -ItemType Directory -Path "C:\var\tmp\media"
 > curl.exe -sSLkf -m 300 -w "%{http_code}" --output-dir "C:\var\tmp\media" -O https://github.com/murali-koppula/medley/raw/refs/heads/main/music.yaml
-> docker run --rm -it -v C:\var\tmp\media:/var/tmp/media mmkdcr/medley:latest -f /var/tmp/media/music.yaml
+> docker run --rm -it -v C:\var\tmp\media:/var/tmp/media mmkdcr/medley:latest yt -f /var/tmp/media/music.yaml
 ```
 
 </details>
@@ -58,7 +58,7 @@ $ docker run --rm -it -v /var/tmp/media:/var/tmp/media mmkdcr/medley:latest -f /
 
 ```
 # Make sure ~/.local/bin/ exists and is in PATH.
-$ curl -sSLkf -m 300 -w %{http_code} -O https://github.com/murali-koppula/medley/releases/download/v1.0.0/medley-linux-amd64.tar.gz
+$ curl -sSLkf -m 300 -w %{http_code} -O https://github.com/murali-koppula/medley/releases/download/v0.1.0/medley-linux-amd64.tar.gz
 $ tar -xzf medley-linux-amd64.tar.gz
 $ rm medley-linux-amd64.tar.gz
 $ mv medley ~/.local/bin/     # ~/.local/bin/ must exist, and be in PATH
@@ -72,7 +72,7 @@ $ mv medley ~/.local/bin/     # ~/.local/bin/ must exist, and be in PATH
 
 ```
 # Make sure ~/.local/bin/ exists and is in PATH.
-% curl -sSLkf -m 300 -w "%{http_code}" -O https://github.com/murali-koppula/medley/releases/download/v1.0.0/medley-darwin-arm64.tar.gz
+% curl -sSLkf -m 300 -w "%{http_code}" -O https://github.com/murali-koppula/medley/releases/download/v0.1.0/medley-darwin-arm64.tar.gz
 % tar -xzf medley-darwin-arm64.tar.gz
 % rm medley-darwin-arm64.tar.gz
 % mv medley ~/.local/bin/
@@ -86,7 +86,7 @@ $ mv medley ~/.local/bin/     # ~/.local/bin/ must exist, and be in PATH
 
 ```
 # Make sure "$env:USERPROFILE\bin\" exists and is in Path
-> curl.exe -sSLkf -m 300 -w "%{http_code}" -O https://github.com/murali-koppula/medley/releases/download/v1.0.0/medley-windows-amd64.zip
+> curl.exe -sSLkf -m 300 -w "%{http_code}" -O https://github.com/murali-koppula/medley/releases/download/v0.1.0/medley-windows-amd64.zip
 > Expand-Archive -Path .\medley-windows-amd64.zip -DestinationPath .\
 > del .\medley-windows-amd64.zip
 > New-Item -ItemType Directory -Path "$env:USERPROFILE\bin"
@@ -115,7 +115,7 @@ optionally rename it as needed; and run the downloaded *MeDLey* binary to genera
 
 ```
 $ curl -sSLkf -m 300 -w "%{http_code}" -O https://github.com/murali-koppula/medley/raw/refs/heads/main/music.yaml
-$ medley -f music.yaml
+$ medley yt -f music.yaml
 ```
 
 </details>
@@ -127,7 +127,7 @@ $ medley -f music.yaml
 ```
 
 > curl.exe -sSLkf -m 300 -w "%{http_code}" -O https://github.com/murali-koppula/medley/raw/refs/heads/main/music.yaml
-> medley.exe -f music.yaml
+> medley.exe yt -f music.yaml
 ```
 
 </details>
