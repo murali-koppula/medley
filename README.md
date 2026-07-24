@@ -30,7 +30,7 @@ optionally rename it as needed; and run the *MeDLey* Docker image to generate th
 $ rm -rf /var/tmp/media/
 $ mkdir /var/tmp/media/
 $ curl -sSLkf -m 300 -w "%{http_code}" --output-dir /var/tmp/media -O https://github.com/murali-koppula/medley/raw/refs/heads/main/music.yaml
-$ docker run --rm -it -v /var/tmp/media:/var/tmp/media mmkdcr/medley:latest yt -f /var/tmp/media/music.yaml
+$ docker run --rm -it -v /var/tmp:/app mmkdcr/medley:latest yt -f media/music.yaml
 ```
 
 </details>
@@ -43,7 +43,7 @@ $ docker run --rm -it -v /var/tmp/media:/var/tmp/media mmkdcr/medley:latest yt -
 > Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\var\tmp\media"
 > New-Item -ItemType Directory -Path "C:\var\tmp\media"
 > curl.exe -sSLkf -m 300 -w "%{http_code}" --output-dir "C:\var\tmp\media" -O https://github.com/murali-koppula/medley/raw/refs/heads/main/music.yaml
-> docker run --rm -it -v C:\var\tmp\media:/var/tmp/media mmkdcr/medley:latest yt -f /var/tmp/media/music.yaml
+> docker run --rm -it -v C:\var\tmp:/app mmkdcr/medley:latest yt -f media/music.yaml
 ```
 
 </details>
