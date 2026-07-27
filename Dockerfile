@@ -15,19 +15,23 @@ FROM python:3.12-alpine
 RUN apk add --no-cache \
     ffmpeg \
     imagemagick \
-    --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing/ \
-    atomicparsley
+    --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing/ atomicparsley
 
 RUN pip install --no-cache-dir --default-timeout=100 \
     yt-dlp \
     eyeD3
 
-WORKDIR /app
-
 COPY --from=builder /app/medley /usr/local/bin/medley
 COPY --from=builder /app/LICENSE /usr/share/doc/medley/LICENSE
 
-# Verify everything is accessible and working in the environment
+WORKDIR /app
+
+RUN chown -R nobody:nobody /app
+ENV HOME=/tmp
+
+USER nobody:nobody
+
+# Verify everything is accessible and working as 'nobody'
 RUN yt-dlp --version && \
     ffmpeg -version && \
     magick -version && \

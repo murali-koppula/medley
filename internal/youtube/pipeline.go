@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"medley/internal/shared"
 
@@ -97,8 +98,31 @@ func ParseMediaFile(path string, mediaHome string) ([]TrackTask, error) {
 func ProcessTask(ctx context.Context, task TrackTask, logChan chan<- string) error {
 	dldir := filepath.Join(task.MediaHome, "downloads")
 	tmpdir := filepath.Join(task.MediaHome, "tmp")
-	_ = os.MkdirAll(dldir, 0755)
-	_ = os.MkdirAll(tmpdir, 0755)
+
+	if err := os.MkdirAll(dldir, 0755); err != nil {
+		return fmt.Errorf("fatal: cannot create download directory: %w", err)
+	}
+
+	if err := os.MkdirAll(tmpdir, 0755); err != nil {
+		return fmt.Errorf("fatal: cannot create tmp directory: %w", err)
+	}
+
+	// Check if all requested formats already exist in their final destinations
+	allFormatsExist := true
+	for _, fmtTarget := range task.Track.Formats {
+		destDir := filepath.Join(task.MediaHome, fmtTarget, task.Track.Folder)
+		finalDest := filepath.Join(destDir, task.Track.Filename+"."+fmtTarget)
+
+		if _, err := os.Stat(finalDest); os.IsNotExist(err) {
+			allFormatsExist = false
+			break // At least one format is missing, so we must process the track
+		}
+	}
+
+	if allFormatsExist {
+		logChan <- fmt.Sprintf("Skipping track: %s (Already exists)", task.Track.Title)
+		return nil // Exit early, skipping download and extraction
+	}
 
 	logChan <- fmt.Sprintf("Processing track: %s", task.Track.Title)
 
@@ -111,7 +135,9 @@ func ProcessTask(ctx context.Context, task TrackTask, logChan chan<- string) err
 	ytargs = append(ytargs, "https://www.youtube.com/watch?v="+task.Track.Ytid)
 
 	logChan <- fmt.Sprintf("Downloading asset %s via yt-dlp...", task.Track.Filename)
+
 	cmd := exec.CommandContext(ctx, "yt-dlp", ytargs...)
+	cmd.WaitDelay = YT_DLP_TIMEOUT_MINUTES * time.Minute
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("yt-dlp failed: %w", err)
 	}
@@ -128,6 +154,15 @@ func ProcessTask(ctx context.Context, task TrackTask, logChan chan<- string) err
 	}
 
 	for _, fmtTarget := range task.Track.Formats {
+		destDir := filepath.Join(task.MediaHome, fmtTarget, task.Track.Folder)
+		finalDest := filepath.Join(destDir, task.Track.Filename+"."+fmtTarget)
+
+		if _, err := os.Stat(finalDest); err == nil {
+			logChan <- fmt.Sprintf("Skipping target format %s for %s (Already exists)", fmtTarget,
+				task.Track.Filename)
+			continue
+		}
+
 		logChan <- fmt.Sprintf("Extracting audio target format: %s", fmtTarget)
 
 		afile := filepath.Join(tmpdir, task.Track.Filename+"."+fmtTarget)
@@ -144,24 +179,28 @@ func ProcessTask(ctx context.Context, task TrackTask, logChan chan<- string) err
 
 		if fmtTarget == "mp3" {
 			if dlext == "webm" || dlext == "m4a" {
-				ffargs = append(ffargs, "-af", "pan=stereo|c0=FL|c1=FL", "-c:a", "libmp3lame", "-b:a", "256k", "-ar", "44100", "-map_metadata", "-1", "-bitexact")
+				ffargs = append(ffargs, "-af", "pan=stereo|c0=FL|c1=FL", "-c:a", "libmp3lame",
+					"-b:a", "256k", "-ar", "44100", "-map_metadata", "-1", "-bitexact")
 			} else {
 				ffargs = append(ffargs, "-c:a", "copy")
 			}
 		} else if fmtTarget == "m4a" {
 			if dlext == "webm" {
-				ffargs = append(ffargs, "-af", "pan=stereo|c0=FL|c1=FL", "-c:a", "aac", "-b:a", "256k", "-ar", "44100", "-map_metadata", "-1", "-bitexact")
+				ffargs = append(ffargs, "-af", "pan=stereo|c0=FL|c1=FL", "-c:a", "aac", "-b:a",
+					"256k", "-ar", "44100", "-map_metadata", "-1", "-bitexact")
 			} else {
 				ffargs = append(ffargs, "-c:a", "copy")
 			}
 		}
 		ffargs = append(ffargs, afile)
 
-		if err := exec.CommandContext(ctx, "ffmpeg", ffargs...).Run(); err != nil {
+		cmd := exec.CommandContext(ctx, "ffmpeg", ffargs...)
+		cmd.WaitDelay = FFMPEG_TIMEOUT_MINUTES * time.Second
+		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("ffmpeg extraction error: %w", err)
 		}
 
-		imgfile := filepath.Join(tmpdir, fmtTarget+".jpg")
+		imgfile := filepath.Join(tmpdir, fmt.Sprintf("%s.%s.jpg", task.Track.Filename, fmtTarget))
 		if task.Track.Thumbnails[fmtTarget] {
 			logChan <- "Converting downscaled artwork layout..."
 			var sizeArg string
@@ -181,14 +220,17 @@ func ProcessTask(ctx context.Context, task TrackTask, logChan chan<- string) err
 			}
 
 			if srcImg != "" {
-				convArgs := []string{srcImg, "-resize", sizeArg, "-interlace", "none", "-strip", "-quality", "80", imgfile}
-				_ = exec.CommandContext(ctx, "convert", convArgs...).Run()
+				convArgs := []string{srcImg, "-resize", sizeArg, "-interlace", "none", "-strip",
+					"-quality", "80", imgfile}
+				cmd := exec.CommandContext(ctx, "convert", convArgs...)
+				cmd.WaitDelay = CONVERT_TIMEOUT_SEC * time.Second
+				if err := cmd.Run(); err != nil {
+					return fmt.Errorf("Image convert error: %w", err)
+				}
 			}
 		}
 
-		destDir := filepath.Join(task.MediaHome, fmtTarget, task.Track.Folder)
 		_ = os.MkdirAll(destDir, 0755)
-		finalDest := filepath.Join(destDir, task.Track.Filename+"."+fmtTarget)
 
 		// Rely on the internal/shared package for common file interactions
 		if err := shared.CopyFile(afile, finalDest); err != nil {
@@ -217,14 +259,20 @@ func ProcessTask(ctx context.Context, task TrackTask, logChan chan<- string) err
 				}
 			}
 			tagArgs = append(tagArgs, finalDest)
-			_ = exec.CommandContext(ctx, "eyeD3", tagArgs...).Run()
+
+			cmd := exec.CommandContext(ctx, "eyeD3", tagArgs...)
+			cmd.WaitDelay = EYED3_TIMEOUT_SEC * time.Second
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("ffmpeg extraction error: %w", err)
+			}
 
 		} else if fmtTarget == "m4a" {
 			aname := task.Track.Artist.Shortname
 			if aname == "" {
 				aname = task.Track.Artist.Name
 			}
-			tagArgs := []string{finalDest, "--album", task.AlbumName, "--tracknum", fmt.Sprintf("%d", task.Track.TrackNum), "--title", task.Track.Title}
+			tagArgs := []string{finalDest, "--album", task.AlbumName, "--tracknum",
+				fmt.Sprintf("%d", task.Track.TrackNum), "--title", task.Track.Title}
 			if task.GenreName != "" {
 				tagArgs = append(tagArgs, "--genre", task.GenreName)
 			}
@@ -240,8 +288,28 @@ func ProcessTask(ctx context.Context, task TrackTask, logChan chan<- string) err
 				}
 			}
 			tagArgs = append(tagArgs, "--overWrite")
-			_ = exec.CommandContext(ctx, "AtomicParsley", tagArgs...).Run()
+
+			cmd := exec.CommandContext(ctx, "AtomicParsley", tagArgs...)
+			cmd.WaitDelay = ATOMICPARSLEY_TIMEOUT_SEC * time.Second
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("ffmpeg extraction error: %w", err)
+			}
 		}
 	}
+
+	logChan <- "Cleaning up download and tmp directories..."
+
+	if dlFiles, err := filepath.Glob(filepath.Join(dldir, task.Track.Filename+".*")); err == nil {
+		for _, f := range dlFiles {
+			_ = os.Remove(f)
+		}
+	}
+
+	if tmpFiles, err := filepath.Glob(filepath.Join(tmpdir, task.Track.Filename+".*")); err == nil {
+		for _, f := range tmpFiles {
+			_ = os.Remove(f)
+		}
+	}
+
 	return nil
 }

@@ -10,6 +10,7 @@ import (
 )
 
 type logMsg string
+type errMsg string
 type statusMsg string
 type doneMsg struct{}
 
@@ -51,7 +52,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "ctrl+c":
 			// Display abort message and quit TUI.
-			timestamp := time.Now().Format("15:04:05")
+			// timestamp := time.Now().Format("15:04:05")
+			timestamp := time.Now().Local().Format("15:04:05")
 			formattedLine := fmt.Sprintf("[%s] %s pressed. Exiting...", timestamp, msg.String())
 			m.logs = append(m.logs, formattedLine)
 			if len(m.logs) > 10 {
@@ -61,13 +63,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 	case logMsg:
-		timestamp := time.Now().Format("15:04:05")
+		timestamp := time.Now().Local().Format("15:04:05")
 		formattedLine := fmt.Sprintf("[%s] %s", timestamp, string(msg))
 		m.logs = append(m.logs, formattedLine)
 		if len(m.logs) > 10 {
 			m.logs = m.logs[1:]
 		}
 		return m, waitForLog(m.logChan)
+
+	case errMsg:
+		timestamp := time.Now().Local().Format("15:04:05")
+		formattedLine := fmt.Sprintf("[%s] %s", timestamp, string(msg))
+		m.logs = append(m.logs, formattedLine)
+		if len(m.logs) > 10 {
+			m.logs = m.logs[1:]
+		}
+		return m, waitForErr(m.errChan)
+
 	case statusMsg:
 		parts := strings.SplitN(string(msg), "|", 2)
 		if len(parts) == 2 {
@@ -114,7 +126,7 @@ func waitForLog(ch chan string) tea.Cmd {
 func waitForErr(ch chan error) tea.Cmd {
 	return func() tea.Msg {
 		if err := <-ch; err != nil {
-			return logMsg("Error encountered: " + err.Error())
+			return errMsg("Error encountered: " + err.Error())
 		}
 		return nil
 	}

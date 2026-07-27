@@ -3,13 +3,32 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 
 	"medley/internal/youtube"
 )
+
+// Helper function to enforce a shutdown timeout
+func waitForCleanup(wg *sync.WaitGroup, timeout time.Duration) {
+	waitCh := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(waitCh)
+	}()
+
+	select {
+	case <-waitCh:
+		GetLogger().Debugf("Workers cleaned up successfully.")
+	case <-time.After(timeout):
+		GetLogger().Debugf("Worker cleanup timed out after %v. Forcing exit.", timeout)
+	}
+}
 
 func init() {
 	var cmdYT = &cobra.Command{
@@ -45,6 +64,7 @@ func (y *YTDownloader) Validate() error {
 	if err != nil {
 		return fmt.Errorf("Initialization Failure parsing configuration matrix: %v\n", err)
 	}
+
 	y.Tasks = tasks
 	return nil
 }
@@ -70,11 +90,26 @@ func (y *YTDownloader) Download(ctx context.Context, p *tea.Program, logChan cha
 
 		GetLogger().Debugf(fmt.Sprintf("%d|Processing track: %s", i+1, task.Track.Title))
 
-		// Outsource the execution logic to the internal youtube package
-		if err := youtube.ProcessTask(ctx, task, logChan); err != nil {
+		taskCtx, taskCancel := context.WithTimeout(ctx, TASK_TIMEOUT_MINUTES*time.Minute)
+
+		if err := youtube.ProcessTask(taskCtx, task, logChan); err != nil {
 			errChan <- err
+			p.Send(doneMsg{})
+			return err
 		}
+
+		taskCancel()
 	}
+
+	// Wipe the entire tmp and downloads directories after all tasks conclude
+	if len(y.Tasks) > 0 {
+		GetLogger().Debugf("Cleaning up downloads and tmp directories.")
+
+		mediaHome := y.Tasks[0].MediaHome
+		_ = os.RemoveAll(filepath.Join(mediaHome, "downloads"))
+		_ = os.RemoveAll(filepath.Join(mediaHome, "tmp"))
+	}
+
 	p.Send(doneMsg{})
 
 	GetLogger().Debugf("Tracks processing complete.")
@@ -119,7 +154,7 @@ func yt(cmd *cobra.Command, args []string) error {
 	finalModel, err := p.Run()
 	if err != nil {
 		cancel()
-		wg.Wait()
+		waitForCleanup(&wg, WG_CLEANUP_TIMEOUT_SEC*time.Second)
 
 		return fmt.Errorf("TUI Error: %v\n", err)
 	}
@@ -131,7 +166,7 @@ func yt(cmd *cobra.Command, args []string) error {
 			GetLogger().Debugf("Process interrupted by user before completion.")
 
 			cancel()
-			wg.Wait()
+			waitForCleanup(&wg, WG_CLEANUP_TIMEOUT_SEC*time.Second)
 
 			return nil
 		}
@@ -141,7 +176,7 @@ func yt(cmd *cobra.Command, args []string) error {
 	GetLogger().Debugf("All tasks completed successfully!")
 
 	cancel()
-	wg.Wait()
+	waitForCleanup(&wg, WG_CLEANUP_TIMEOUT_SEC*time.Second)
 
 	// Entering here triggers 'defer cancel()', signaling background tasks to stop immediately
 	return nil
