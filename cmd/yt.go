@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"sync"
@@ -77,6 +78,12 @@ func (y *YTDownloader) Download(ctx context.Context, p *tea.Program, logChan cha
 	errChan chan error) error {
 	GetLogger().Debugf("Number of tracks to process: %d\n", len(y.Tasks))
 
+	taskPauseTimer := time.NewTimer(time.Second)
+	defer taskPauseTimer.Stop()
+
+	batchPauseTimer := time.NewTimer(time.Second)
+	defer batchPauseTimer.Stop()
+
 	for i, task := range y.Tasks {
 		select {
 		case <-ctx.Done():
@@ -99,6 +106,50 @@ func (y *YTDownloader) Download(ctx context.Context, p *tea.Program, logChan cha
 		}
 
 		taskCancel()
+
+		if !taskPauseTimer.Stop() {
+			select {
+			case <-taskPauseTimer.C:
+			default:
+			}
+		}
+
+		baseDuration := YT_BASE_TRACK_PAUSE_SEC * time.Second
+		taskPauseDuration := baseDuration + rand.N(1500*time.Millisecond)
+		taskPauseTimer.Reset(taskPauseDuration)
+
+		GetLogger().Debugf(fmt.Sprintf("Pausing %f seconds.", taskPauseDuration.Seconds()))
+
+		select {
+		case <-taskPauseTimer.C:
+			GetLogger().Debugf("Pause ended...")
+		case <-ctx.Done():
+			GetLogger().Debugf("Shutdown signal received. Aborting tasks cleanly...")
+			return ctx.Err()
+		}
+
+		if (i+1)%YT_BATCH_PAUSE_INTERVAL == 0 && i != len(y.Tasks)-1 {
+			if !batchPauseTimer.Stop() {
+				select {
+				case <-batchPauseTimer.C:
+				default:
+				}
+			}
+
+			batchPauseDuration := YT_BATCH_PAUSE_SEC * time.Second
+			batchPauseTimer.Reset(batchPauseDuration)
+
+			GetLogger().Debugf(fmt.Sprintf("%d tracks completed. Pausing %f seconds.",
+				YT_BATCH_PAUSE_INTERVAL, batchPauseDuration.Seconds()))
+
+			select {
+			case <-batchPauseTimer.C:
+				GetLogger().Debugf("Pause ended...")
+			case <-ctx.Done():
+				GetLogger().Debugf("Shutdown signal received. Aborting tasks cleanly...")
+				return ctx.Err()
+			}
+		}
 	}
 
 	// Wipe the entire tmp and downloads directories after all tasks conclude

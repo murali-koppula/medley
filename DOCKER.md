@@ -32,10 +32,10 @@ $ docker run --rm -it -v /var/tmp:/app mmkdcr/medley:latest yt -f media/music.ya
 <summary><i>Windows</i></summary>
 
 ```
-> Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\var\tmp\media"
-> New-Item -ItemType Directory -Path "C:\var\tmp\media"
-> curl.exe -sSLkf -m 300 -w "%{http_code}" --output-dir "C:\var\tmp\media" -O https://github.com/murali-koppula/medley/raw/refs/heads/main/music.yaml
-> docker run --rm -it -v C:\var\tmp:/app mmkdcr/medley:latest yt -f media/music.yaml
+> Remove-Item -Recurse -Force "$env:SystemDrive\var\tmp\medley" -ErrorAction SilentlyContinue
+> New-Item -ItemType Directory -Force -Path "$env:SystemDrive\var\tmp\medley\.cache\medley"
+> curl.exe -sSLkf -m 300 -w "%{http_code}" --output-dir "$env:SystemDrive\var\tmp\medley" -O https://github.com/murali-koppula/medley/raw/refs/heads/main/music.yaml
+> docker run --rm -it -v "${env:SystemDrive}\var\tmp\medley:/app" mmkdcr/medley:latest yt -f music.yaml -V
 ```
 
 </details>

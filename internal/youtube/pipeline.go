@@ -126,7 +126,7 @@ func ProcessTask(ctx context.Context, task TrackTask, logChan chan<- string) err
 
 	logChan <- fmt.Sprintf("Processing track: %s", task.Track.Title)
 
-	ytargs := []string{"--no-warnings", "--quiet", "-f", "ba[ext=webm],ba"}
+	ytargs := []string{"--no-warnings", "--quiet", "--no-cache-dir", "-f", "ba[ext=webm],ba"}
 	needImg := task.Track.Thumbnails["mp3"] || task.Track.Thumbnails["m4a"]
 	if needImg {
 		ytargs = append(ytargs, "--write-thumbnail")
@@ -138,8 +138,10 @@ func ProcessTask(ctx context.Context, task TrackTask, logChan chan<- string) err
 
 	cmd := exec.CommandContext(ctx, "yt-dlp", ytargs...)
 	cmd.WaitDelay = YT_DLP_TIMEOUT_MINUTES * time.Minute
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("yt-dlp failed: %w", err)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("yt-dlp failed: %w (output: %s)", err, string(output))
 	}
 
 	var dlext string

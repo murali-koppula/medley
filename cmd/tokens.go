@@ -21,3 +21,8 @@ const WG_CLEANUP_TIMEOUT_SEC = 60
 //     ATOMICPARSLEY_TIMEOUT_SEC
 // )
 const TASK_TIMEOUT_MINUTES = 5
+
+// Pause processing due to youtube rate limits.
+const YT_BASE_TRACK_PAUSE_SEC = 2  // Base pause between each track
+const YT_BATCH_PAUSE_INTERVAL = 10 // Take a longer break every N tracks
+const YT_BATCH_PAUSE_SEC = 12      // Duration of the longer break in seconds
