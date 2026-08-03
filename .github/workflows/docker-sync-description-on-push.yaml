@@ -1,0 +1,27 @@
+
+name: Sync Docker Hub Description
+
+on:
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+  push:
+    paths:
+      - 'DOCKER.md'
+    branches:
+      - main
+
+jobs:
+  update-description:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Sync DOCKER.md to Docker Hub
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: mmkdcr/medley
+          short-description: ${{ github.event.repository.description }}
+          readme-filepath: ./DOCKER.md
+
