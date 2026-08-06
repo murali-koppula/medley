@@ -1,0 +1,117 @@
+
+name: Publish Production Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go Runtime
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Compile Cross-Platform Production Binaries
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o medley .
+          tar -czf medley-linux-amd64.tar.gz medley
+          rm medley
+
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o medley .
+          tar -czf medley-darwin-arm64.tar.gz medley
+          rm medley
+
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o medley.exe .
+          zip medley-windows-amd64.zip medley.exe
+          rm medley.exe
+
+          sha256sum medley-*.tar.gz medley-*.zip > checksums.txt
+
+      - name: Generate Automated GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            medley-linux-amd64.tar.gz
+            medley-darwin-arm64.tar.gz
+            medley-windows-amd64.zip
+            checksums.txt
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            mmkdcr/medley:latest
+            mmkdcr/medley:${{ github.ref_name }}
+
+      - name: Sync DOCKER.md to Docker Hub using API
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          SHORT_DESC: ${{ github.event.repository.description }}
+        run: |
+          echo "Authenticating with Docker Hub..."
+          
+          # 1. Fetch the JWT token using your credentials
+          JWT=$(curl -sSLkf -X POST -H "Content-Type: application/json" \
+            -d "{\"username\":\"${DOCKERHUB_USERNAME}\",\"password\":\"${DOCKERHUB_TOKEN}\"}" \
+            https://hub.docker.com/v2/users/login/ | jq -r .token)
+
+          if [ "$JWT" = "null" ] || [ -z "$JWT" ]; then
+            echo "Error: Failed to retrieve JWT token. Check your credentials."
+            exit 1
+          fi
+
+          echo "Constructing JSON payload..."
+          
+          # 2. Use jq to safely escape the file contents and inject it into valid JSON
+          PAYLOAD=$(jq -n \
+            --arg short "${SHORT_DESC:-MeDLey — Interactive pipeline for media downloading and post-processing.}" \
+            --rawfile full ./DOCKER.md \
+            '{description: $short, full_description: $full}')
+
+          echo "Pushing description to Docker Hub..."
+          
+          # 3. Execute the PATCH request
+          HTTP_CODE=$(curl -sSL -o /dev/null -w "%{http_code}" \
+            -X PATCH \
+            -H "Authorization: JWT $JWT" \
+            -H "Content-Type: application/json" \
+            -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" \
+            -d "$PAYLOAD" \
+            https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/medley/)
+
+          # 4. Check for success
+          if [ "$HTTP_CODE" -eq 200 ]; then
+            echo "Successfully updated repository description!"
+          else
+            echo "Error: Failed to update description. HTTP Status Code: $HTTP_CODE"
+            exit 1
+          fi
+
