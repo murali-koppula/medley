@@ -44,7 +44,7 @@ $ docker run --rm -it -v /etc/localtime:/etc/localtime:ro -v /var/tmp/medley:/ap
 > Remove-Item -Recurse -Force "$env:SystemDrive\var\tmp\medley" -ErrorAction SilentlyContinue
 > New-Item -ItemType Directory -Force -Path "$env:SystemDrive\var\tmp\medley\.cache\medley"
 > curl.exe -sSLkf -m 300 -w "%{http_code}" --output-dir "$env:SystemDrive\var\tmp\medley" -O https://github.com/murali-koppula/medley/raw/refs/heads/main/music.yaml
-> docker run --rm -it -v "${env:SystemDrive}\var\tmp\medley:/app" mmkdcr/medley:latest yt -f music.yaml -V
+> docker run --rm -it -v "$env:SystemDrive\var\tmp\medley:/app" mmkdcr/medley:latest yt -f music.yaml -V
 ```
 
 </details>
