@@ -29,8 +29,11 @@ RUN RUSTFLAGS="-C target-feature=+crt-static" \
 
 FROM python:3.12-alpine
 
-RUN apk add --no-cache ca-certificates ffmpeg imagemagick \
- && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community deno \
+RUN apk add --no-cache \
+    ca-certificates \
+    ffmpeg \
+    imagemagick \
+    deno \
  && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing/ atomicparsley
 
 RUN pip install --no-cache-dir --default-timeout=100 \
