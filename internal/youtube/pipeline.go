@@ -10,6 +10,7 @@ import (
 
 	"medley/internal/shared"
 
+	"github.com/adrg/xdg"
 	"gopkg.in/yaml.v3"
 )
 
@@ -95,7 +96,12 @@ func ParseMediaFile(path string, mediaHome string) ([]TrackTask, error) {
 	return tasks, nil
 }
 
-func ProcessTask(ctx context.Context, task TrackTask, logChan chan<- string) error {
+func ProcessTask(ctx context.Context,
+	appName string, task TrackTask, logChan chan<- string, verbose bool,
+	cookieFilePathPtr *string, ytdlpTimeout time.Duration, ffmpegTimeout time.Duration,
+	convTimeout time.Duration, eyed3Timeout time.Duration,
+	atomicparsleyTimeout time.Duration) error {
+
 	dldir := filepath.Join(task.MediaHome, "downloads")
 	tmpdir := filepath.Join(task.MediaHome, "tmp")
 
@@ -126,7 +132,25 @@ func ProcessTask(ctx context.Context, task TrackTask, logChan chan<- string) err
 
 	logChan <- fmt.Sprintf("Processing track: %s", task.Track.Title)
 
-	ytargs := []string{"--no-warnings", "--quiet", "--no-cache-dir", "-f", "ba[ext=webm],ba"}
+	var ytargs []string
+	if verbose {
+		ytargs = []string{"--verbose"}
+	} else {
+		ytargs = []string{"--no-warnings", "--quiet"}
+	}
+
+	// Full absolute path of the command "bgutil-pot" is not required for the
+	// "youtubepot-bgutilcli:cli_path" if the command is in the $PATH.
+
+	ytargs = append(ytargs,
+		"--no-cache-dir",
+		"-f", "ba[ext=webm],ba",
+		"--extractor-args", "youtubepot-bgutilcli:cli_path=bgutil-pot")
+
+	if cookieFilePathPtr != nil {
+		ytargs = append(ytargs, "--cookies", *cookieFilePathPtr)
+	}
+
 	needImg := task.Track.Thumbnails["mp3"] || task.Track.Thumbnails["m4a"]
 	if needImg {
 		ytargs = append(ytargs, "--write-thumbnail")
@@ -137,12 +161,32 @@ func ProcessTask(ctx context.Context, task TrackTask, logChan chan<- string) err
 	logChan <- fmt.Sprintf("Downloading asset %s via yt-dlp...", task.Track.Filename)
 
 	cmd := exec.CommandContext(ctx, "yt-dlp", ytargs...)
-	cmd.WaitDelay = YT_DLP_TIMEOUT_MINUTES * time.Minute
+	cmd.WaitDelay = ytdlpTimeout
 
-	output, err := cmd.CombinedOutput()
+	// --------
+	// output, err := cmd.CombinedOutput()
+	// if err != nil {
+	// 	return fmt.Errorf("yt-dlp failed: %w (output: %s)", err, string(output))
+	// }
+
+	ytdlpLogFilename, err := xdg.StateFile(filepath.Join(appName, "yt-dlp.log"))
 	if err != nil {
-		return fmt.Errorf("yt-dlp failed: %w (output: %s)", err, string(output))
+		return fmt.Errorf("Failed to resolve yt-dlp log file: %s\n%w", ytdlpLogFilename, err)
 	}
+
+	ytdlpLogFile, err := os.OpenFile(ytdlpLogFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return fmt.Errorf("Failed to open yt-dlp log file: %w", err)
+	}
+	defer ytdlpLogFile.Close()
+
+	cmd.Stdout = ytdlpLogFile
+	cmd.Stderr = ytdlpLogFile
+	err = cmd.Run()
+	if err != nil {
+		return fmt.Errorf("yt-dlp failed: %w (logfile: %s)", err, ytdlpLogFilename)
+	}
+	// --------
 
 	var dlext string
 	for _, ext := range []string{"webm", "m4a", "mp3"} {
@@ -170,7 +214,15 @@ func ProcessTask(ctx context.Context, task TrackTask, logChan chan<- string) err
 		afile := filepath.Join(tmpdir, task.Track.Filename+"."+fmtTarget)
 		dlfile := filepath.Join(dldir, task.Track.Filename+"."+dlext)
 
-		ffargs := []string{"-nostdin", "-y", "-loglevel", "error"}
+		ffargs := []string{"-nostdin", "-y"}
+
+		// -loglevel [error | verbose | debug]
+		if verbose {
+			ffargs = append(ffargs, "-loglevel", "verbose")
+		} else {
+			ffargs = append(ffargs, "-hide_banner", "-loglevel", "error")
+		}
+
 		if task.Track.Section.Start != "" {
 			ffargs = append(ffargs, "-ss", task.Track.Section.Start)
 		}
@@ -197,10 +249,31 @@ func ProcessTask(ctx context.Context, task TrackTask, logChan chan<- string) err
 		ffargs = append(ffargs, afile)
 
 		cmd := exec.CommandContext(ctx, "ffmpeg", ffargs...)
-		cmd.WaitDelay = FFMPEG_TIMEOUT_MINUTES * time.Second
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("ffmpeg extraction error: %w", err)
+		cmd.WaitDelay = ffmpegTimeout
+
+		// --------
+		// if err := cmd.Run(); err != nil {
+		// 	return fmt.Errorf("ffmpeg extraction error: %w", err)
+		// }
+
+		ffmpegLogFilename, err := xdg.StateFile(filepath.Join(appName, "ffmpeg.log"))
+		if err != nil {
+			return fmt.Errorf("Failed to resolve ffmpeg log file: %s\n%w", ffmpegLogFilename, err)
 		}
+
+		ffmpegLogFile, err := os.OpenFile(ffmpegLogFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		if err != nil {
+			return fmt.Errorf("Failed to open ffmpeg log file: %w", err)
+		}
+		defer ffmpegLogFile.Close()
+
+		cmd.Stdout = ffmpegLogFile
+		cmd.Stderr = ffmpegLogFile
+		err = cmd.Run()
+		if err != nil {
+			return fmt.Errorf("ffmpeg failed: %w (logfile: %s)", err, ffmpegLogFilename)
+		}
+		// --------
 
 		imgfile := filepath.Join(tmpdir, fmt.Sprintf("%s.%s.jpg", task.Track.Filename, fmtTarget))
 		if task.Track.Thumbnails[fmtTarget] {
@@ -222,13 +295,45 @@ func ProcessTask(ctx context.Context, task TrackTask, logChan chan<- string) err
 			}
 
 			if srcImg != "" {
-				convArgs := []string{srcImg, "-resize", sizeArg, "-interlace", "none", "-strip",
-					"-quality", "80", imgfile}
-				cmd := exec.CommandContext(ctx, "convert", convArgs...)
-				cmd.WaitDelay = CONVERT_TIMEOUT_SEC * time.Second
-				if err := cmd.Run(); err != nil {
-					return fmt.Errorf("Image convert error: %w", err)
+
+				// convArgs := []string{srcImg, "-resize", sizeArg, "-interlace", "none", "-strip",
+				// 	"-quality", "80", imgfile}
+
+				var convArgs []string
+				if verbose {
+					convArgs = []string{"-verbose"}
+				} else {
+					convArgs = []string{"-quiet"}
 				}
+				convArgs = append(convArgs, srcImg, "-resize", sizeArg, "-interlace", "none",
+					"-strip", "-quality", "80", imgfile)
+
+				cmd := exec.CommandContext(ctx, "convert", convArgs...)
+				cmd.WaitDelay = convTimeout
+
+				// --------
+				// if err := cmd.Run(); err != nil {
+				// 	return fmt.Errorf("Image convert error: %w", err)
+				// }
+
+				convLogFilename, err := xdg.StateFile(filepath.Join(appName, "convert.log"))
+				if err != nil {
+					return fmt.Errorf("Failed to resolve convert log file: %s\n%w", convLogFilename, err)
+				}
+
+				convLogFile, err := os.OpenFile(convLogFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+				if err != nil {
+					return fmt.Errorf("Failed to open convert log file: %w", err)
+				}
+				defer convLogFile.Close()
+
+				cmd.Stdout = convLogFile
+				cmd.Stderr = convLogFile
+				err = cmd.Run()
+				if err != nil {
+					return fmt.Errorf("convert failed: %w (logfile: %s)", err, convLogFilename)
+				}
+				// --------
 			}
 		}
 
@@ -240,12 +345,20 @@ func ProcessTask(ctx context.Context, task TrackTask, logChan chan<- string) err
 		}
 
 		if fmtTarget == "mp3" {
-			tagArgs := []string{
+			var tagArgs []string
+			if verbose {
+				tagArgs = []string{"--verbose", "--log-level", "verbose"}
+			} else {
+				tagArgs = []string{"--quiet", "--log-level=error"}
+			}
+
+			tagArgs = append(tagArgs,
 				"--to-v2.3", "--encoding", "latin1",
 				"--album", task.AlbumName,
 				"--track", fmt.Sprintf("%d", task.Track.TrackNum),
 				"--title", task.Track.Title,
-			}
+			)
+
 			if task.GenreName != "" {
 				tagArgs = append(tagArgs, "--genre", task.GenreName)
 			}
@@ -263,18 +376,41 @@ func ProcessTask(ctx context.Context, task TrackTask, logChan chan<- string) err
 			tagArgs = append(tagArgs, finalDest)
 
 			cmd := exec.CommandContext(ctx, "eyeD3", tagArgs...)
-			cmd.WaitDelay = EYED3_TIMEOUT_SEC * time.Second
-			if err := cmd.Run(); err != nil {
-				return fmt.Errorf("ffmpeg extraction error: %w", err)
+			cmd.WaitDelay = eyed3Timeout
+
+			// --------
+			// if err := cmd.Run(); err != nil {
+			// 	return fmt.Errorf("eyeD3 tagging error: %w", err)
+			// }
+
+			eyed3LogFilename, err := xdg.StateFile(filepath.Join(appName, "eyed3.log"))
+			if err != nil {
+				return fmt.Errorf("Failed to resolve eyed3 log file: %s\n%w", eyed3LogFilename, err)
 			}
 
+			eyed3LogFile, err := os.OpenFile(eyed3LogFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+			if err != nil {
+				return fmt.Errorf("Failed to open eyed3 log file: %w", err)
+			}
+			defer eyed3LogFile.Close()
+
+			cmd.Stdout = eyed3LogFile
+			cmd.Stderr = eyed3LogFile
+			err = cmd.Run()
+			if err != nil {
+				return fmt.Errorf("eyed3 failed: %w (logfile: %s)", err, eyed3LogFilename)
+			}
+			// --------
+
 		} else if fmtTarget == "m4a" {
+
 			aname := task.Track.Artist.Shortname
 			if aname == "" {
 				aname = task.Track.Artist.Name
 			}
 			tagArgs := []string{finalDest, "--album", task.AlbumName, "--tracknum",
 				fmt.Sprintf("%d", task.Track.TrackNum), "--title", task.Track.Title}
+
 			if task.GenreName != "" {
 				tagArgs = append(tagArgs, "--genre", task.GenreName)
 			}
@@ -292,10 +428,35 @@ func ProcessTask(ctx context.Context, task TrackTask, logChan chan<- string) err
 			tagArgs = append(tagArgs, "--overWrite")
 
 			cmd := exec.CommandContext(ctx, "AtomicParsley", tagArgs...)
-			cmd.WaitDelay = ATOMICPARSLEY_TIMEOUT_SEC * time.Second
-			if err := cmd.Run(); err != nil {
-				return fmt.Errorf("ffmpeg extraction error: %w", err)
+			cmd.WaitDelay = atomicparsleyTimeout
+
+			// --------
+			// if err := cmd.Run(); err != nil {
+			// 	return fmt.Errorf("atomicparsley  extraction error: %w", err)
+			// }
+
+			atomicparsleyLogFilename, err := xdg.StateFile(filepath.Join(appName,
+				"atomicparsley.log"))
+			if err != nil {
+				return fmt.Errorf("Failed to resolve atomicparsley log file: %s\n%w",
+					atomicparsleyLogFilename, err)
 			}
+
+			atomicparsleyLogFile, err := os.OpenFile(atomicparsleyLogFilename,
+				os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+			if err != nil {
+				return fmt.Errorf("Failed to open atomicparsley log file: %w", err)
+			}
+			defer atomicparsleyLogFile.Close()
+
+			cmd.Stdout = atomicparsleyLogFile
+			cmd.Stderr = atomicparsleyLogFile
+			err = cmd.Run()
+			if err != nil {
+				return fmt.Errorf("atomicparsley failed: %w (logfile: %s)", err,
+					atomicparsleyLogFilename)
+			}
+			// --------
 		}
 	}
 

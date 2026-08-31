@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/adrg/xdg"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 
@@ -74,8 +75,38 @@ func (y *YTDownloader) TotalTasks() int {
 	return len(y.Tasks)
 }
 
-func (y *YTDownloader) Download(ctx context.Context, p *tea.Program, logChan chan string,
-	errChan chan error) error {
+func (y *YTDownloader) Download(ctx context.Context, p *tea.Program,
+	logChan chan string, errChan chan error) error {
+
+	logChan <- "Checking Cookies file ..."
+
+	resolvedPath, err := xdg.ConfigFile(filepath.Join(appName, cookieFileBasename))
+	if err != nil {
+		GetLogger().Errorf("Failed to resolve cookies file: %s\n%w", resolvedPath, err)
+		errChan <- err
+		p.Send(doneMsg{})
+		return err
+	}
+
+	// os.Open(resolvedPath) equivelent to: os.OpenFile(resolvedPath, os.O_RDONLY, 0)
+	// if cookieFile, err := os.Open(resolvedPath); os.IsNotExist(err) {}
+	// cookieFile, err := os.Open(resolvedPath)
+	// if os.IsNotExist(err) {}
+
+	var cookieFilePathPtr *string
+
+	if cookieFile, err := os.Open(resolvedPath); os.IsNotExist(err) {
+		GetLogger().Warning("Cookies file %s does not exist.", resolvedPath)
+	} else if err != nil {
+		GetLogger().Errorf("Cookies file exists, but unable to open.\n%v", err)
+		errChan <- err
+		p.Send(doneMsg{})
+		return err
+	} else {
+		cookieFilePathPtr = &resolvedPath
+		cookieFile.Close()
+	}
+
 	GetLogger().Debugf("Number of tracks to process: %d\n", len(y.Tasks))
 
 	taskPauseTimer := time.NewTimer(time.Second)
@@ -99,7 +130,17 @@ func (y *YTDownloader) Download(ctx context.Context, p *tea.Program, logChan cha
 
 		taskCtx, taskCancel := context.WithTimeout(ctx, TASK_TIMEOUT_MINUTES*time.Minute)
 
-		if err := youtube.ProcessTask(taskCtx, task, logChan); err != nil {
+		ytdlpTimeout := time.Duration(YT_DLP_TIMEOUT_MINUTES) * time.Minute
+		ffmpegTimeout := time.Duration(FFMPEG_TIMEOUT_MINUTES) * time.Second
+		convTimeout := time.Duration(CONVERT_TIMEOUT_SEC) * time.Second
+		eyed3Timeout := time.Duration(EYED3_TIMEOUT_SEC) * time.Second
+		atomicparsleyTimeout := time.Duration(ATOMICPARSLEY_TIMEOUT_SEC) * time.Second
+
+		if err := youtube.ProcessTask(taskCtx,
+			appName, task, logChan, tokens.verbose, cookieFilePathPtr,
+			ytdlpTimeout, ffmpegTimeout, convTimeout, eyed3Timeout, atomicparsleyTimeout,
+		); err != nil {
+
 			errChan <- err
 			p.Send(doneMsg{})
 			return err

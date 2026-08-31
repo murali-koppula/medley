@@ -6,13 +6,14 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/adrg/xdg"
 	"github.com/spf13/cobra"
 	logging "gopkg.in/op/go-logging.v1"
 )
 
 var rootCmd = &cobra.Command{
 	Version: commandVersion,
-	Use:     "medley",
+	Use:     appName,
 	Short:   "Interactive pipeline for automated media downloading and post-processing.",
 	Long: `
 A high-performance, interactive Go pipeline for downloading, re-encoding, and metadata-tagging
@@ -31,22 +32,16 @@ injecting tags into your music library — all rendered inside a live-updating t
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SetOut(cmd.OutOrStdout())
 
-		cacheDir, err := os.UserCacheDir()
+		logFilePath, err := xdg.StateFile(filepath.Join(appName, appName+".log"))
 		if err != nil {
-			return fmt.Errorf("failed to get cache dir: %w", err)
-		}
-
-		logDir := filepath.Join(cacheDir, "medley")
-		if err := os.MkdirAll(logDir, 0700); err != nil {
-			return fmt.Errorf("failed to create log dir: %w", err)
+			return fmt.Errorf("failed to resolve log file: %s\n%w", logFilePath, err)
 		}
 
 		logFile, err := os.OpenFile(
-			filepath.Join(logDir, "medley.log"),
+			logFilePath,
 			os.O_CREATE|os.O_WRONLY|os.O_TRUNC,
 			0666,
 		)
-
 		if err != nil {
 			return fmt.Errorf("failed to open log file: %w", err)
 		}

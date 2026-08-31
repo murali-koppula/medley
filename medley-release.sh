@@ -69,8 +69,6 @@ function publish_docker_image() {
 
     info "Generating '$cfgdir/config.json' using docker hub token."
 
-    rm -f $cfgdir/config.json
-
     info "Pruning existing images."
 
     docker image rm $duser/$pname:latest >/dev/null 2>&1
@@ -86,13 +84,15 @@ function publish_docker_image() {
 
     export DOCKER_CONFIG="$cfgdir"
 
+    rm -f $DOCKER_CONFIG/config.json
+
     docker login --password-stdin -u $duser >/dev/null 2>/dev/null <<<"$dtoken" || {
         local rc=$?
         error "publish_docker_image(): unable to login to docker hub as '$duser' [$rc]."
         return $rc
     }
 
-    ls -d $cfgdir/config.json >/dev/null || return
+    ls -d $DOCKER_CONFIG/config.json >/dev/null || return
 
     docker push $duser/$pname:latest >/dev/null 2>&1 || {
         local rc=$?
@@ -238,6 +238,7 @@ function build_artifacts() {
 
     rm -f $pname $datadir/${pname}-linux-amd64.tar.gz
 
+    go mod tidy &&
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o $pname . &&
     ls $pname >/dev/null &&
     tar -czf $datadir/${pname}-linux-amd64.tar.gz $pname &&
