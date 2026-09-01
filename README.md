@@ -31,7 +31,6 @@ optionally rename it as needed; and run the *MeDLey* Docker image to generate th
 
 ```
 $ sudo rm -rf /var/tmp/medley
-$ mkdir -p /var/tmp/medley/.cache/medley
 $ curl -sSLkf -m 300 -w "%{http_code}" --output-dir /var/tmp/medley -O https://github.com/murali-koppula/medley/raw/refs/heads/main/music.yaml
 $ sudo chown -R nobody /var/tmp/medley
 # Optionally, copy any exported cookies to /var/tmp/medley/.config/medley/cookies.txt
