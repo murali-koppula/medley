@@ -11,12 +11,15 @@ injecting tags into your music library — all rendered inside a live-updating t
 The tool can be used to generate media files using one of these methods:
 
 * *MeDLey* docker image from *Docker Hub*.
-* Static binaries of *MeDLey* (🐧 `Linux`, 🍎 `Darwin`, 🪟 `Windows`).
+* Static binaries of *MeDLey* (🐧 `Linux`, 🍎 `Darwin`).
 
 ### Generate media files using Docker image
 
-> Before you run *MeDLey* docker image, install necessary docker packages on your platform and make
-  sure you can run the *docker* client on your platform.
+> * Before you run *MeDLey* docker image, install necessary docker packages on your platform and
+    make sure you can run the *docker* client on your platform.
+> * Optionally, login to the media site in a browser and export the cookies in
+    *Netscape HTTP Cookie File* format to a file specified below. Without the auth cookies some
+    media may be restricted.
 
 Download a sample of
 [*music.yaml*](https://github.com/murali-koppula/medley/raw/refs/heads/main/music.yaml). Edit it and
@@ -31,20 +34,8 @@ $ sudo rm -rf /var/tmp/medley
 $ mkdir -p /var/tmp/medley/.cache/medley
 $ curl -sSLkf -m 300 -w "%{http_code}" --output-dir /var/tmp/medley -O https://github.com/murali-koppula/medley/raw/refs/heads/main/music.yaml
 $ sudo chown -R nobody /var/tmp/medley
+# Optionally, copy any exported cookies to /var/tmp/medley/.config/medley/cookies.txt
 $ docker run --rm -it -v /etc/localtime:/etc/localtime:ro -v /var/tmp/medley:/app mmkdcr/medley:latest yt -f music.yaml -V
-```
-
-</details>
-
-<details>
-
-<summary><i>Windows</i></summary>
-
-```
-> Remove-Item -Recurse -Force "$env:SystemDrive\var\tmp\medley" -ErrorAction SilentlyContinue
-> New-Item -ItemType Directory -Force -Path "$env:SystemDrive\var\tmp\medley\.cache\medley"
-> curl.exe -sSLkf -m 300 -w "%{http_code}" --output-dir "$env:SystemDrive\var\tmp\medley" -O https://github.com/murali-koppula/medley/raw/refs/heads/main/music.yaml
-> docker run --rm -it -v "$env:SystemDrive\var\tmp\medley:/app" mmkdcr/medley:latest yt -f music.yaml -V
 ```
 
 </details>
@@ -81,21 +72,6 @@ $ mv medley ~/.local/bin/     # ~/.local/bin/ must exist, and be in PATH
 
 </details>
 
-<details>
-
-<summary><i>Windows</i></summary>
-
-```
-# Make sure "$env:USERPROFILE\bin\" exists and is in Path
-> curl.exe -sSLkf -m 300 -w "%{http_code}" -O https://github.com/murali-koppula/medley/releases/download/v0.1.0/medley-windows-amd64.zip
-> Expand-Archive -Path .\medley-windows-amd64.zip -DestinationPath .\
-> del .\medley-windows-amd64.zip
-> New-Item -ItemType Directory -Path "$env:USERPROFILE\bin"
-> Move-Item .\medley.exe "$env:USERPROFILE\bin\"
-```
-
-</details>
-
 * **Generate media files**
 
 > Before you run *MeDLey* binary locally, install necessary *audio*/*video*  packages on your
@@ -116,19 +92,8 @@ optionally rename it as needed; and run the downloaded *MeDLey* binary to genera
 
 ```
 $ curl -sSLkf -m 300 -w "%{http_code}" -O https://github.com/murali-koppula/medley/raw/refs/heads/main/music.yaml
+# Optionally, copy any exported cookies to ~/.config/medley/cookies.txt
 $ medley yt -f music.yaml
-```
-
-</details>
-
-<details>
-
-<summary><i>Windows</i></summary>
-
-```
-
-> curl.exe -sSLkf -m 300 -w "%{http_code}" -O https://github.com/murali-koppula/medley/raw/refs/heads/main/music.yaml
-> medley.exe yt -f music.yaml
 ```
 
 </details>
@@ -143,16 +108,6 @@ Now you can explore and play the generated media files using your favorite media
 
 ```
 $ vlc /var/tmp/media/m4a/western-film-musical/theramin/ecstasy-of-gold.m4a
-```
-
-</details>
-
-<details>
-
-<summary><i>Windows</i></summary>
-
-```
-& "C:\Program Files\VideoLAN\VLC\vlc.exe" "C:\var\tmp\media\ecstasy-of-gold.m4a"
 ```
 
 </details>
