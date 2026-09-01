@@ -163,12 +163,6 @@ func ProcessTask(ctx context.Context,
 	cmd := exec.CommandContext(ctx, "yt-dlp", ytargs...)
 	cmd.WaitDelay = ytdlpTimeout
 
-	// --------
-	// output, err := cmd.CombinedOutput()
-	// if err != nil {
-	// 	return fmt.Errorf("yt-dlp failed: %w (output: %s)", err, string(output))
-	// }
-
 	ytdlpLogFilename, err := xdg.StateFile(filepath.Join(appName, "yt-dlp.log"))
 	if err != nil {
 		return fmt.Errorf("Failed to resolve yt-dlp log file: %s\n%w", ytdlpLogFilename, err)
@@ -186,7 +180,6 @@ func ProcessTask(ctx context.Context,
 	if err != nil {
 		return fmt.Errorf("yt-dlp failed: %w (logfile: %s)", err, ytdlpLogFilename)
 	}
-	// --------
 
 	var dlext string
 	for _, ext := range []string{"webm", "m4a", "mp3"} {
@@ -251,11 +244,6 @@ func ProcessTask(ctx context.Context,
 		cmd := exec.CommandContext(ctx, "ffmpeg", ffargs...)
 		cmd.WaitDelay = ffmpegTimeout
 
-		// --------
-		// if err := cmd.Run(); err != nil {
-		// 	return fmt.Errorf("ffmpeg extraction error: %w", err)
-		// }
-
 		ffmpegLogFilename, err := xdg.StateFile(filepath.Join(appName, "ffmpeg.log"))
 		if err != nil {
 			return fmt.Errorf("Failed to resolve ffmpeg log file: %s\n%w", ffmpegLogFilename, err)
@@ -273,7 +261,6 @@ func ProcessTask(ctx context.Context,
 		if err != nil {
 			return fmt.Errorf("ffmpeg failed: %w (logfile: %s)", err, ffmpegLogFilename)
 		}
-		// --------
 
 		imgfile := filepath.Join(tmpdir, fmt.Sprintf("%s.%s.jpg", task.Track.Filename, fmtTarget))
 		if task.Track.Thumbnails[fmtTarget] {
@@ -311,11 +298,6 @@ func ProcessTask(ctx context.Context,
 				cmd := exec.CommandContext(ctx, "convert", convArgs...)
 				cmd.WaitDelay = convTimeout
 
-				// --------
-				// if err := cmd.Run(); err != nil {
-				// 	return fmt.Errorf("Image convert error: %w", err)
-				// }
-
 				convLogFilename, err := xdg.StateFile(filepath.Join(appName, "convert.log"))
 				if err != nil {
 					return fmt.Errorf("Failed to resolve convert log file: %s\n%w", convLogFilename, err)
@@ -333,7 +315,6 @@ func ProcessTask(ctx context.Context,
 				if err != nil {
 					return fmt.Errorf("convert failed: %w (logfile: %s)", err, convLogFilename)
 				}
-				// --------
 			}
 		}
 
@@ -378,11 +359,6 @@ func ProcessTask(ctx context.Context,
 			cmd := exec.CommandContext(ctx, "eyeD3", tagArgs...)
 			cmd.WaitDelay = eyed3Timeout
 
-			// --------
-			// if err := cmd.Run(); err != nil {
-			// 	return fmt.Errorf("eyeD3 tagging error: %w", err)
-			// }
-
 			eyed3LogFilename, err := xdg.StateFile(filepath.Join(appName, "eyed3.log"))
 			if err != nil {
 				return fmt.Errorf("Failed to resolve eyed3 log file: %s\n%w", eyed3LogFilename, err)
@@ -400,7 +376,6 @@ func ProcessTask(ctx context.Context,
 			if err != nil {
 				return fmt.Errorf("eyed3 failed: %w (logfile: %s)", err, eyed3LogFilename)
 			}
-			// --------
 
 		} else if fmtTarget == "m4a" {
 
@@ -430,11 +405,6 @@ func ProcessTask(ctx context.Context,
 			cmd := exec.CommandContext(ctx, "AtomicParsley", tagArgs...)
 			cmd.WaitDelay = atomicparsleyTimeout
 
-			// --------
-			// if err := cmd.Run(); err != nil {
-			// 	return fmt.Errorf("atomicparsley  extraction error: %w", err)
-			// }
-
 			atomicparsleyLogFilename, err := xdg.StateFile(filepath.Join(appName,
 				"atomicparsley.log"))
 			if err != nil {
@@ -456,7 +426,6 @@ func ProcessTask(ctx context.Context,
 				return fmt.Errorf("atomicparsley failed: %w (logfile: %s)", err,
 					atomicparsleyLogFilename)
 			}
-			// --------
 		}
 	}
 

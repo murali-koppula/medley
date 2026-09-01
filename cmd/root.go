@@ -84,6 +84,6 @@ func init() {
 	rootCmd.SetVersionTemplate("Current Version: {{.Version}}\n")
 
 	rootCmd.PersistentFlags().BoolVarP(&tokens.verbose, "verbose", "V", false, "Verbose mode")
-	rootCmd.PersistentFlags().StringVarP(&tokens.mediaHome, "home", "H", "./media",
+	rootCmd.PersistentFlags().StringVarP(&tokens.mediaHome, "home", "H", "media",
 		"Root directory where media will be saved")
 }

@@ -1,6 +1,4 @@
 
-media-home: "/var/tmp/media"
-
 genres:
   - name: "Western Classical"
     albums:

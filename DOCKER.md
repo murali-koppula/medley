@@ -26,17 +26,6 @@ docker run --rm -it -v /etc/localtime:/etc/localtime:ro -v /var/tmp/medley:/app 
 ```
 </details>
 
-<details>
-<summary><i>Windows</i></summary>
-
-```
-Remove-Item -Recurse -Force "$env:SystemDrive\var\tmp\medley" -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force -Path "$env:SystemDrive\var\tmp\medley\.cache\medley"
-curl.exe -sSLkf -m 300 -w "%{http_code}" --output-dir "$env:SystemDrive\var\tmp\medley" -O https://github.com/murali-koppula/medley/raw/refs/heads/main/music.yaml
-docker run --rm -it -v "$env:SystemDrive\var\tmp\medley:/app" mmkdcr/medley:latest yt -f music.yaml -V
-```
-</details>
-
 ### Play audio files
 
 Now you can explore and play the generated audio files using your favorite audio player.
@@ -46,14 +35,6 @@ Now you can explore and play the generated audio files using your favorite audio
 
 ```
 vlc /var/tmp/media/m4a/western-film-musical/theramin/ecstasy-of-gold.m4a
-```
-</details>
-
-<details>
-<summary><i>Windows</i></summary>
-
-```
-& "$env:SystemDrive\Program Files\VideoLAN\VLC\vlc.exe" "C:\var\tmp\media\ecstasy-of-gold.m4a"
 ```
 </details>
 
